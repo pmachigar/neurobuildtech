@@ -1,3 +1,6 @@
+import GreetingDemo from "./components/GreetingDemo";
+  {/* Ejemplo de lógica compartida entre web y móvil */}
+  <GreetingDemo />
         {/* Ejemplo de componente remoto federado */}
         {/* Client Component para federación */}
         <div className="w-full mb-8">
