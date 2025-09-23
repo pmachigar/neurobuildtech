@@ -1,0 +1,269 @@
+version: '3.8'
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: neurobuildtech
+      POSTGRES_USER: neurobuild
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - neurobuildtech-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - neurobuildtech-network
+
+  # Backend Microservices
+  users-service:
+    build: ./backend/users-service
+    ports:
+      - "3010:3010"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - JWT_SECRET=neurobuildtech-secret-key
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - neurobuildtech-network
+
+  services-service:
+    build: ./backend/services-service
+    ports:
+      - "3011:3011"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - neurobuildtech-network
+
+  consulting-service:
+    build: ./backend/consulting-service
+    ports:
+      - "3012:3012"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - neurobuildtech-network
+
+  ai-service:
+    build: ./backend/ai-service
+    ports:
+      - "3013:3013"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - neurobuildtech-network
+
+  n8n-service:
+    build: ./backend/n8n-service
+    ports:
+      - "3014:3014"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+      - N8N_HOST=n8n-automation
+      - N8N_PORT=5678
+    depends_on:
+      - postgres
+      - redis
+      - n8n-automation
+    networks:
+      - neurobuildtech-network
+
+  iot-service:
+    build: ./backend/iot-service
+    ports:
+      - "3015:3015"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+      - MQTT_BROKER=mqtt://mosquitto:1883
+    depends_on:
+      - postgres
+      - redis
+      - mosquitto
+    networks:
+      - neurobuildtech-network
+
+  payments-service:
+    build: ./backend/payments-service
+    ports:
+      - "3016:3016"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=neurobuild
+      - DB_PASSWORD=password
+      - DB_NAME=neurobuildtech
+      - REDIS_URL=redis://redis:6379
+      - MERCADOPAGO_ACCESS_TOKEN=${MERCADOPAGO_ACCESS_TOKEN}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - neurobuildtech-network
+
+  api-gateway:
+    build: ./backend/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - USERS_SERVICE_URL=http://users-service:3010
+      - SERVICES_SERVICE_URL=http://services-service:3011
+      - CONSULTING_SERVICE_URL=http://consulting-service:3012
+      - AI_SERVICE_URL=http://ai-service:3013
+      - N8N_SERVICE_URL=http://n8n-service:3014
+      - IOT_SERVICE_URL=http://iot-service:3015
+      - PAYMENTS_SERVICE_URL=http://payments-service:3016
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - users-service
+      - services-service
+      - consulting-service
+      - ai-service
+      - n8n-service
+      - iot-service
+      - payments-service
+    networks:
+      - neurobuildtech-network
+
+  # Frontend Micro Frontends
+  mfe-landing:
+    build: ./frontend/mfe-landing
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    networks:
+      - neurobuildtech-network
+
+  mfe-services:
+    build: ./frontend/mfe-services
+    ports:
+      - "3002:3002"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    networks:
+      - neurobuildtech-network
+
+  shell-app:
+    build: ./frontend/shell-app
+    ports:
+      - "3100:3100"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - MFE_LANDING_URL=http://localhost:3001
+      - MFE_SERVICES_URL=http://localhost:3002
+    networks:
+      - neurobuildtech-network
+
+  # External Services
+  n8n-automation:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=neurobuild
+      - DB_POSTGRESDB_PASSWORD=password
+      - N8N_ENCRYPTION_KEY=n8n-encryption-key
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - postgres
+    networks:
+      - neurobuildtech-network
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - neurobuildtech-network
+
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - neurobuildtech-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3030:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - neurobuildtech-network
+
+volumes:
+  postgres_data:
+  n8n_data:
+  mosquitto_data:
+  mosquitto_logs:
+  grafana_data:
+
+networks:
+  neurobuildtech-network:
+    driver: bridge
