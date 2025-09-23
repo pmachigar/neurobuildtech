@@ -4,5 +4,5 @@ module.exports = {
     '^.+\\.(ts|tsx)$': 'babel-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect'],
+  setupFilesAfterEnv: ['@testing-library/jest-dom'],
 };
