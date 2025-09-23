@@ -1,10 +1,19 @@
 // Ejemplo de integración Apollo Client con GraphQL backend NestJS
 import * as React from 'react';
-import { ApolloClient, InMemoryCache, ApolloProvider, useQuery, useMutation, gql } from '@apollo/client';
+import { 
+  ApolloClient, 
+  InMemoryCache, 
+  gql,
+  HttpLink 
+} from '@apollo/client';
+import { 
+  ApolloProvider, 
+  useQuery, 
+  useMutation 
+} from '@apollo/client/react';
 
-// Configuración del cliente Apollo apuntando al endpoint GraphQL del backend
 const client = new ApolloClient({
-  uri: 'http://localhost:3000/graphql', // Cambia la URL según tu backend
+  link: new HttpLink({ uri: 'http://localhost:3000/graphql' }), // Cambia la URL según tu backend
   cache: new InMemoryCache(),
 });
 
@@ -26,19 +35,30 @@ const CREATE_USER = gql`
 `;
 
 // Componente que muestra el resultado de la query hello
+type HelloData = {
+  hello: string;
+};
+
 function HelloDemo() {
-  const { data, loading, error } = useQuery(HELLO_QUERY);
+  const { data, loading, error } = useQuery<HelloData>(HELLO_QUERY);
   // Muestra estado de carga, error o el resultado
   if (loading) return <div>Cargando...</div>;
   if (error) return <div>Error: {error.message}</div>;
-  return <div>Respuesta GraphQL: {data.hello}</div>;
+  return <div>Respuesta GraphQL: {data?.hello}</div>;
 }
 
 // Componente para crear un usuario usando mutation
+type CreateUserData = {
+  createUser: {
+    id: string;
+    name: string;
+  };
+};
+
 function CreateUserDemo() {
   const [id, setId] = React.useState('');
   const [name, setName] = React.useState('');
-  const [createUser, { data, loading, error }] = useMutation(CREATE_USER);
+  const [createUser, { data, loading, error }] = useMutation<CreateUserData>(CREATE_USER);
 
   // Maneja el envío del formulario
   const handleSubmit = (e: React.FormEvent) => {
