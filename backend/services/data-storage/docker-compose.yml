@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: neurobuild-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      # Initial setup configuration
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD:-adminpassword123}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-neurobuildtech}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-sensor_data}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN:-neurobuild-super-secret-token}
+      # Retention period (30 days for raw data)
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      # Enable HTTPS (optional, configure certificates)
+      - INFLUXDB_HTTP_HTTPS_ENABLED=false
+      # Data encryption at rest
+      - INFLUXDB_DATA_QUERY_LOG_ENABLED=true
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+      - ./scripts:/scripts:ro
+    restart: unless-stopped
+    networks:
+      - neurobuild-network
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Chronograf for visualization and management (optional)
+  chronograf:
+    image: chronograf:1.10
+    container_name: neurobuild-chronograf
+    ports:
+      - "8888:8888"
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-neurobuildtech}
+    volumes:
+      - chronograf-data:/var/lib/chronograf
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+    networks:
+      - neurobuild-network
+
+networks:
+  neurobuild-network:
+    driver: bridge
+
+volumes:
+  influxdb-data:
+    driver: local
+  influxdb-config:
+    driver: local
+  chronograf-data:
+    driver: local
