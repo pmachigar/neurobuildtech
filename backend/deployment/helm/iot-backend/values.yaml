@@ -1,0 +1,354 @@
+# Default values for iot-backend Helm chart
+# Optimized for Raspberry Pi 5B cluster (6 nodes, 16GB RAM, 512GB M.2 each)
+
+global:
+  # Container registry
+  imageRegistry: docker.io
+  imagePullPolicy: IfNotPresent
+  
+  # Storage class for persistent volumes
+  storageClass: local-path
+  
+  # Namespace
+  namespace: iot-backend
+
+# Device Management Service
+deviceManagement:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: neurobuildtech/device-management
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    type: ClusterIP
+    port: 8080
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+
+# Data Ingestion Service
+dataIngestion:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: neurobuildtech/data-ingestion
+    tag: latest
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    port: 8081
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+# API Service
+apiService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: neurobuildtech/api-service
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    type: ClusterIP
+    port: 8082
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+
+# Analytics Service
+analytics:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: neurobuildtech/analytics
+    tag: latest
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    port: 8083
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+
+# InfluxDB (Time-series Database)
+influxdb:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: influxdb
+    tag: 2.7-alpine
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  persistence:
+    enabled: true
+    size: 50Gi
+    mountPath: /var/lib/influxdb2
+  service:
+    type: ClusterIP
+    port: 8086
+  config:
+    adminUser: admin
+    adminPassword: changeme
+    organization: neurobuildtech
+    bucket: iot-data
+
+# PostgreSQL (Relational Database)
+postgresql:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: 15-alpine
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  persistence:
+    enabled: true
+    size: 30Gi
+    mountPath: /var/lib/postgresql/data
+  service:
+    type: ClusterIP
+    port: 5432
+  config:
+    database: iotdb
+    user: iotuser
+    password: changeme
+
+# Redis (Cache and Message Queue)
+redis:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: 7-alpine
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  persistence:
+    enabled: true
+    size: 10Gi
+    mountPath: /data
+  service:
+    type: ClusterIP
+    port: 6379
+  config:
+    password: changeme
+    maxmemory: "256mb"
+    maxmemoryPolicy: "allkeys-lru"
+
+# Mosquitto (MQTT Broker)
+mosquitto:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: eclipse-mosquitto
+    tag: 2.0-openssl
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  persistence:
+    enabled: true
+    size: 5Gi
+    mountPath: /mosquitto/data
+  service:
+    type: LoadBalancer
+    port: 1883
+    websocketPort: 9001
+  config:
+    allowAnonymous: false
+    persistence: true
+    logType: all
+
+# Prometheus (Monitoring)
+prometheus:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: prom/prometheus
+    tag: v2.48.0
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  persistence:
+    enabled: true
+    size: 20Gi
+    mountPath: /prometheus
+  service:
+    type: ClusterIP
+    port: 9090
+  scrapeInterval: 30s
+  evaluationInterval: 30s
+
+# Grafana (Visualization)
+grafana:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: grafana/grafana
+    tag: 10.2.3
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  persistence:
+    enabled: true
+    size: 5Gi
+    mountPath: /var/lib/grafana
+  service:
+    type: LoadBalancer
+    port: 3000
+  config:
+    adminUser: admin
+    adminPassword: changeme
+
+# Loki (Log Aggregation)
+loki:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: grafana/loki
+    tag: 2.9.3
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  persistence:
+    enabled: true
+    size: 10Gi
+    mountPath: /loki
+  service:
+    type: ClusterIP
+    port: 3100
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: api.neurobuildtech.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-service
+    - host: grafana.neurobuildtech.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: grafana
+  tls:
+    - secretName: neurobuildtech-tls
+      hosts:
+        - api.neurobuildtech.local
+        - grafana.neurobuildtech.local
+
+# High Availability and Resilience
+ha:
+  # Pod Disruption Budgets
+  pdb:
+    enabled: true
+    minAvailable: 1
+  
+  # Pod Anti-Affinity (spread pods across nodes)
+  podAntiAffinity:
+    enabled: true
+    type: preferred  # or 'required' for stricter rules
+  
+  # Node Affinity (prefer worker nodes)
+  nodeAffinity:
+    enabled: true
+    key: node-type
+    value: worker
+
+# Health Checks
+healthChecks:
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+
+# Service Mesh (optional)
+serviceMesh:
+  enabled: false
+  type: linkerd  # or istio
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 7  # Keep backups for 7 days
+  storageSize: 100Gi

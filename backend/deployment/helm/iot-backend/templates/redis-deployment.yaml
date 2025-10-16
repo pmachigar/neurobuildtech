@@ -1,0 +1,135 @@
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    {{- include "iot-backend.labels" . | nindent 4 }}
+data:
+  redis.conf: |
+    # Redis configuration for IoT backend
+    maxmemory {{ .Values.redis.config.maxmemory }}
+    maxmemory-policy {{ .Values.redis.config.maxmemoryPolicy }}
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    appendfsync everysec
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-auth
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    {{- include "iot-backend.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  password: {{ .Values.redis.config.password }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ include "iot-backend.storageClass" . }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.redis.replicaCount }}
+  selector:
+    matchLabels:
+      app: redis
+      {{- include "iot-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: redis
+        {{- include "iot-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ include "iot-backend.image" (dict "Values" .Values "image" .Values.redis.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - redis-server
+            - /usr/local/etc/redis/redis.conf
+            - --requirepass
+            - $(REDIS_PASSWORD)
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.service.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-auth
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.redis.persistence.mountPath }}
+            - name: config
+              mountPath: /usr/local/etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-pvc
+        - name: config
+          configMap:
+            name: redis-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.redis.service.type }}
+  ports:
+    - port: {{ .Values.redis.service.port }}
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis
+    {{- include "iot-backend.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -34,3 +34,40 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Kubernetes and deployment artifacts
+*.kubeconfig
+kubeconfig
+k3s-token
+*.pem
+*.key
+*.crt
+
+# Ansible
+*.retry
+.ansible/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Helm
+charts/*.tgz
+.helm/
+
+# Backup files
+*.backup
+*.bak
+backup/
+
+# Secrets and credentials
+secrets/
+credentials/
+*.secret
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/

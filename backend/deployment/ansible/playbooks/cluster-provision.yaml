@@ -1,0 +1,192 @@
+---
+# Ansible Playbook for Provisioning Raspberry Pi K3s Cluster
+# This playbook prepares all nodes and installs K3s
+
+- name: Prepare all nodes
+  hosts: k3s_cluster
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    k3s_version: v1.28.5+k3s1
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      register: upgrade_result
+      changed_when: upgrade_result.changed
+    
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - git
+          - vim
+          - htop
+          - iotop
+          - net-tools
+          - nfs-common
+        state: present
+    
+    - name: Disable swap
+      shell: |
+        dphys-swapfile swapoff
+        dphys-swapfile uninstall
+        systemctl disable dphys-swapfile
+      ignore_errors: yes
+    
+    - name: Enable cgroup memory in boot config
+      lineinfile:
+        path: /boot/cmdline.txt
+        regexp: '^((?!.*\bcgroup_memory=1\b).*)$'
+        line: '\1 cgroup_memory=1 cgroup_enable=memory'
+        backrefs: yes
+      register: boot_config
+    
+    - name: Set timezone
+      timezone:
+        name: UTC
+    
+    - name: Configure limits
+      pam_limits:
+        domain: '*'
+        limit_type: '-'
+        limit_item: nofile
+        value: 65536
+    
+    - name: Reboot if boot config changed
+      reboot:
+        msg: "Reboot initiated by Ansible for cgroup changes"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+      when: boot_config.changed
+
+- name: Install K3s master node
+  hosts: k3s_master
+  become: yes
+  
+  vars:
+    k3s_version: v1.28.5+k3s1
+    
+  tasks:
+    - name: Check if K3s is already installed
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_installed
+    
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s_install.sh
+        mode: '0700'
+      when: not k3s_installed.stat.exists
+    
+    - name: Install K3s master
+      shell: |
+        INSTALL_K3S_VERSION={{ k3s_version }} /tmp/k3s_install.sh server \
+          --write-kubeconfig-mode 644 \
+          --disable traefik \
+          --disable servicelb \
+          --node-taint node-role.kubernetes.io/master=true:NoSchedule
+      when: not k3s_installed.stat.exists
+    
+    - name: Wait for K3s to be ready
+      wait_for:
+        path: /var/lib/rancher/k3s/server/node-token
+        timeout: 120
+    
+    - name: Read node token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: node_token
+    
+    - name: Save node token
+      set_fact:
+        k3s_node_token: "{{ node_token.content | b64decode | trim }}"
+    
+    - name: Get K3s master IP
+      set_fact:
+        k3s_master_ip: "{{ ansible_default_ipv4.address }}"
+    
+    - name: Display node token
+      debug:
+        msg: "K3s Node Token: {{ k3s_node_token }}"
+
+- name: Install K3s worker nodes
+  hosts: k3s_workers
+  become: yes
+  serial: 1
+  
+  vars:
+    k3s_version: v1.28.5+k3s1
+    
+  tasks:
+    - name: Check if K3s is already installed
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_installed
+    
+    - name: Get master node token
+      set_fact:
+        k3s_node_token: "{{ hostvars[groups['k3s_master'][0]].k3s_node_token }}"
+        k3s_master_ip: "{{ hostvars[groups['k3s_master'][0]].k3s_master_ip }}"
+    
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s_install.sh
+        mode: '0700'
+      when: not k3s_installed.stat.exists
+    
+    - name: Install K3s worker
+      shell: |
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_URL=https://{{ k3s_master_ip }}:6443 \
+        K3S_TOKEN={{ k3s_node_token }} \
+        /tmp/k3s_install.sh
+      when: not k3s_installed.stat.exists
+    
+    - name: Wait for node to be ready
+      wait_for:
+        timeout: 30
+
+- name: Configure kubectl on master
+  hosts: k3s_master
+  become: yes
+  
+  tasks:
+    - name: Create .kube directory
+      file:
+        path: /home/{{ ansible_user }}/.kube
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    - name: Copy kubeconfig to user home
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /home/{{ ansible_user }}/.kube/config
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+    
+    - name: Display cluster info
+      shell: kubectl get nodes
+      register: nodes_output
+      become_user: "{{ ansible_user }}"
+    
+    - name: Show cluster nodes
+      debug:
+        msg: "{{ nodes_output.stdout_lines }}"

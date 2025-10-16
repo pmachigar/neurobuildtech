@@ -1,0 +1,345 @@
+# Grafana Configuration for Raspberry Pi Cluster Visualization
+# Includes pre-configured dashboards for IoT backend monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: iot-backend
+  labels:
+    app: grafana
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+      
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: true
+      
+      - name: InfluxDB
+        type: influxdb
+        access: proxy
+        url: http://influxdb:8086
+        database: iot-data
+        editable: true
+        jsonData:
+          version: Flux
+          organization: neurobuildtech
+          defaultBucket: iot-data
+          tlsSkipVerify: true
+        secureJsonData:
+          token: ${INFLUXDB_TOKEN}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: iot-backend
+  labels:
+    app: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'Default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-cluster
+  namespace: iot-backend
+  labels:
+    app: grafana
+    dashboard: cluster
+data:
+  cluster-overview.json: |
+    {
+      "dashboard": {
+        "title": "Raspberry Pi Cluster Overview",
+        "tags": ["cluster", "raspberry-pi", "k3s"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "Cluster CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "100 - (avg by (node) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "{{node}}"
+              }
+            ]
+          },
+          {
+            "title": "Cluster Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "{{node}}"
+              }
+            ]
+          },
+          {
+            "title": "Cluster Disk Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})) * 100",
+                "legendFormat": "{{node}}"
+              }
+            ]
+          },
+          {
+            "title": "Node Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=\"kubernetes-nodes\"}",
+                "legendFormat": "{{node}}"
+              }
+            ]
+          },
+          {
+            "title": "Pod Count by Node",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "count by (node) (kube_pod_info)",
+                "legendFormat": "{{node}}"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-services
+  namespace: iot-backend
+  labels:
+    app: grafana
+    dashboard: services
+data:
+  services-overview.json: |
+    {
+      "dashboard": {
+        "title": "IoT Services Overview",
+        "tags": ["services", "iot", "backend"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "Service Availability",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=~\"device-management|data-ingestion|api-service|analytics\"}",
+                "legendFormat": "{{job}}"
+              }
+            ]
+          },
+          {
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total[5m])",
+                "legendFormat": "{{service}}"
+              }
+            ]
+          },
+          {
+            "title": "Response Time (p95)",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "{{service}}"
+              }
+            ]
+          },
+          {
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+                "legendFormat": "{{service}}"
+              }
+            ]
+          },
+          {
+            "title": "Database Connections",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "pg_stat_database_numbackends",
+                "legendFormat": "PostgreSQL"
+              },
+              {
+                "expr": "redis_connected_clients",
+                "legendFormat": "Redis"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-credentials
+  namespace: iot-backend
+  labels:
+    app: grafana
+type: Opaque
+stringData:
+  admin-user: admin
+  admin-password: changeme
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: iot-backend
+  labels:
+    app: grafana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: iot-backend
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.3
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: admin-password
+            - name: GF_INSTALL_PLUGINS
+              value: "grafana-piechart-panel"
+            - name: GF_SERVER_ROOT_URL
+              value: "http://grafana.neurobuildtech.local"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-cluster
+              mountPath: /var/lib/grafana/dashboards/cluster
+            - name: dashboard-services
+              mountPath: /var/lib/grafana/dashboards/services
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-config
+          configMap:
+            name: grafana-dashboards-config
+        - name: dashboard-cluster
+          configMap:
+            name: grafana-dashboard-cluster
+        - name: dashboard-services
+          configMap:
+            name: grafana-dashboard-services
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: iot-backend
+  labels:
+    app: grafana
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: grafana

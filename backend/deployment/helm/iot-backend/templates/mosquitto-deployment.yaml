@@ -1,0 +1,130 @@
+{{- if .Values.mosquitto.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: mosquitto
+    {{- include "iot-backend.labels" . | nindent 4 }}
+data:
+  mosquitto.conf: |
+    # Mosquitto configuration for IoT backend
+    persistence {{ .Values.mosquitto.config.persistence }}
+    persistence_location /mosquitto/data/
+    log_dest stdout
+    log_type {{ .Values.mosquitto.config.logType }}
+    
+    # MQTT Protocol
+    listener {{ .Values.mosquitto.service.port }}
+    protocol mqtt
+    allow_anonymous {{ .Values.mosquitto.config.allowAnonymous }}
+    
+    # WebSocket Protocol
+    listener {{ .Values.mosquitto.service.websocketPort }}
+    protocol websockets
+    
+    # Authentication (when not anonymous)
+    {{- if not .Values.mosquitto.config.allowAnonymous }}
+    password_file /mosquitto/config/passwd
+    {{- end }}
+  
+  passwd: |
+    # Add users here: username:password_hash
+    # Generate with: mosquitto_passwd -c passwd username
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: mosquitto
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ include "iot-backend.storageClass" . }}
+  resources:
+    requests:
+      storage: {{ .Values.mosquitto.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: mosquitto
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mosquitto.replicaCount }}
+  selector:
+    matchLabels:
+      app: mosquitto
+      {{- include "iot-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+        {{- include "iot-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: mosquitto
+          image: {{ include "iot-backend.image" (dict "Values" .Values "image" .Values.mosquitto.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: mqtt
+              containerPort: {{ .Values.mosquitto.service.port }}
+              protocol: TCP
+            - name: websocket
+              containerPort: {{ .Values.mosquitto.service.websocketPort }}
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.mosquitto.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.mosquitto.persistence.mountPath }}
+            - name: config
+              mountPath: /mosquitto/config
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mosquitto-pvc
+        - name: config
+          configMap:
+            name: mosquitto-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: mosquitto
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.mosquitto.service.type }}
+  ports:
+    - port: {{ .Values.mosquitto.service.port }}
+      targetPort: mqtt
+      protocol: TCP
+      name: mqtt
+    - port: {{ .Values.mosquitto.service.websocketPort }}
+      targetPort: websocket
+      protocol: TCP
+      name: websocket
+  selector:
+    app: mosquitto
+    {{- include "iot-backend.selectorLabels" . | nindent 4 }}
+{{- end }}
