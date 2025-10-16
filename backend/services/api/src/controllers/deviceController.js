@@ -96,8 +96,9 @@ const getDevice = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'DEVICE_NOT_FOUND', 'Device not found');
   }
 
-  // Remove sensitive data
-  const { api_key, ...deviceData } = device;
+  // Remove sensitive data before sending
+  const deviceData = { ...device };
+  delete deviceData.api_key;
 
   res.json({
     success: true,
@@ -124,7 +125,9 @@ const updateDevice = asyncHandler(async (req, res) => {
 
   devices.set(id, updatedDevice);
 
-  const { api_key, ...deviceData } = updatedDevice;
+  // Remove sensitive data before sending
+  const deviceData = { ...updatedDevice };
+  delete deviceData.api_key;
 
   res.json({
     success: true,

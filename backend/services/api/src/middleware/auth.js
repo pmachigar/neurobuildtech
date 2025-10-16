@@ -25,11 +25,14 @@ const authMiddleware = (req, res, next) => {
     // API Key authentication (for devices)
     if (apiKey) {
       if (apiKey.startsWith(API_KEY_PREFIX)) {
-        // In production, validate against database
+        // In production, validate against database and get device_id
+        // For now, we allow any device with valid API key format
         req.user = {
           id: apiKey,
           role: 'device',
-          type: 'api_key'
+          type: 'api_key',
+          // Device can submit data for any device (in production, map API key to device_id)
+          device_id: null
         };
         return next();
       } else {

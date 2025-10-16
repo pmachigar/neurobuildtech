@@ -1,15 +1,20 @@
 const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
-const redis = require('redis');
 
-// Redis configuration for distributed rate limiting
-const redisClient = process.env.REDIS_URL 
-  ? redis.createClient({ url: process.env.REDIS_URL })
-  : null;
+// Redis configuration for distributed rate limiting (optional)
+let redisClient = null;
+let RedisStore = null;
 
-if (redisClient) {
-  redisClient.on('error', (err) => console.error('Redis Client Error:', err));
-  redisClient.connect().catch(console.error);
+// Try to load Redis modules if available
+try {
+  if (process.env.REDIS_URL) {
+    const redis = require('redis');
+    RedisStore = require('rate-limit-redis');
+    redisClient = redis.createClient({ url: process.env.REDIS_URL });
+    redisClient.on('error', (err) => console.error('Redis Client Error:', err));
+    redisClient.connect().catch(console.error);
+  }
+} catch (err) {
+  console.warn('Redis not available, using in-memory rate limiting:', err.message);
 }
 
 /**
@@ -28,7 +33,7 @@ const defaultLimiter = rateLimit({
     }
   },
   // Use Redis store if available for distributed systems
-  store: redisClient ? new RedisStore({
+  store: (redisClient && RedisStore) ? new RedisStore({
     client: redisClient,
     prefix: 'rl:default:'
   }) : undefined,
@@ -53,7 +58,7 @@ const strictLimiter = rateLimit({
       message: 'Too many authentication attempts, please try again later.'
     }
   },
-  store: redisClient ? new RedisStore({
+  store: (redisClient && RedisStore) ? new RedisStore({
     client: redisClient,
     prefix: 'rl:strict:'
   }) : undefined
@@ -74,7 +79,7 @@ const deviceLimiter = rateLimit({
       message: 'Device is sending data too frequently. Maximum 60 requests per minute.'
     }
   },
-  store: redisClient ? new RedisStore({
+  store: (redisClient && RedisStore) ? new RedisStore({
     client: redisClient,
     prefix: 'rl:device:'
   }) : undefined,
@@ -98,7 +103,7 @@ const queryLimiter = rateLimit({
       message: 'Too many data queries. Please slow down your requests.'
     }
   },
-  store: redisClient ? new RedisStore({
+  store: (redisClient && RedisStore) ? new RedisStore({
     client: redisClient,
     prefix: 'rl:query:'
   }) : undefined

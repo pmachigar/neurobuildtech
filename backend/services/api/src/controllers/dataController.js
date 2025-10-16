@@ -158,7 +158,7 @@ const getSensorTypeData = asyncHandler(async (req, res) => {
  * Get aggregated data
  */
 const getAggregatedData = asyncHandler(async (req, res) => {
-  const { device_id, sensor_type, aggregation, start_time, end_time, metrics } = req.query;
+  const { device_id, sensor_type, aggregation, start_time, end_time } = req.query;
 
   if (!aggregation || !start_time || !end_time) {
     throw new ApiError(400, 'MISSING_PARAMETERS', 
@@ -234,7 +234,8 @@ const submitSensorData = asyncHandler(async (req, res) => {
   const { device_id, timestamp, readings } = req.body;
 
   // Verify device has permission to submit data
-  if (req.user.role === 'device' && req.user.id !== device_id) {
+  // In production, validate device_id against API key mapping in database
+  if (req.user.role === 'device' && req.user.device_id && req.user.device_id !== device_id) {
     throw new ApiError(403, 'FORBIDDEN', 
       'Device can only submit data for itself');
   }

@@ -41,14 +41,17 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // Rate limiting
 app.use('/api/', rateLimitMiddleware);
 
-// Health check (no auth required)
+// Public routes (no auth required)
 app.use('/api/v1/health', healthRouter);
 
 // Protected routes
 app.use('/api/v1/devices', authMiddleware, devicesRouter);
 app.use('/api/v1/data', authMiddleware, dataRouter);
-app.use('/api/v1/metrics', authMiddleware, healthRouter);
-app.use('/api/v1/status', authMiddleware, healthRouter);
+
+// Health metrics and status (protected)
+const healthController = require('./controllers/healthController');
+app.get('/api/v1/metrics', authMiddleware, healthController.getMetrics);
+app.get('/api/v1/status', authMiddleware, healthController.getSystemStatus);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

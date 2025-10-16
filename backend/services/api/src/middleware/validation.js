@@ -1,5 +1,3 @@
-const Joi = require('joi');
-
 /**
  * Generic validation middleware factory
  */

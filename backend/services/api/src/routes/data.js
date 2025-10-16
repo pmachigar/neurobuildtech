@@ -4,8 +4,6 @@ const dataController = require('../controllers/dataController');
 const { validate, validatePagination, validateDateRange } = require('../middleware/validation');
 const { deviceLimiter, queryLimiter } = require('../middleware/rateLimit');
 const { 
-  sensorDataQuerySchema, 
-  aggregatedDataQuerySchema,
   sensorDataSubmissionSchema 
 } = require('../schemas/data.schema');
 
