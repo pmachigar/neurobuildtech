@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: analytics-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+
+  # Redis for state management
+  redis:
+    image: redis:7-alpine
+    container_name: analytics-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # Analytics Service
+  analytics:
+    build: .
+    container_name: analytics-service
+    ports:
+      - "3000:3000"
+    environment:
+      # Service Configuration
+      SERVICE_NAME: analytics-service
+      PORT: 3000
+      NODE_ENV: development
+
+      # MQTT Configuration
+      MQTT_ENABLED: "true"
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      MQTT_TOPICS: sensors/#
+
+      # Redis Configuration
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_STREAM: sensor-events
+
+      # Email Notifications (configure with your SMTP settings)
+      EMAIL_ENABLED: "false"
+      # SMTP_HOST: smtp.gmail.com
+      # SMTP_PORT: 587
+      # SMTP_USER: your-email@gmail.com
+      # SMTP_PASS: your-app-password
+      # EMAIL_FROM: alerts@neurobuildtech.com
+      # EMAIL_RECIPIENTS: admin@example.com
+
+      # SMS Notifications (configure with your Twilio credentials)
+      SMS_ENABLED: "false"
+      # TWILIO_ACCOUNT_SID: your-account-sid
+      # TWILIO_AUTH_TOKEN: your-auth-token
+      # TWILIO_PHONE_NUMBER: +1234567890
+      # SMS_RECIPIENTS: +1234567890
+
+      # Webhook Configuration
+      # WEBHOOK_URLS: https://example.com/webhook
+
+      # Processing Configuration
+      ANOMALY_DETECTION: "true"
+      CORRELATION: "true"
+      MAX_HISTORY_SIZE: 100
+      CORRELATION_WINDOW: 60000
+      SENSOR_TIMEOUT_MINUTES: 10
+
+      # API Configuration
+      API_ENABLED: "true"
+      API_AUTH_REQUIRED: "false"
+      # API_KEY: your-secure-api-key
+
+      # Logging
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    depends_on:
+      - mqtt
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+networks:
+  default:
+    name: analytics-network
