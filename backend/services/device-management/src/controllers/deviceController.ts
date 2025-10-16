@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Device, DeviceStatus, IDevice } from '../models/Device';
+import { Device, DeviceStatus } from '../models/Device';
 import { generateDeviceId, generateApiKey } from '../utils/deviceUtils';
 import { generateToken } from '../utils/jwt';
 import { cacheDeviceStatus } from '../utils/redis';

@@ -13,15 +13,16 @@ export const authenticateDevice = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'No token provided',
       });
+      return;
     }
 
     const token = authHeader.substring(7);
@@ -29,10 +30,11 @@ export const authenticateDevice = async (
 
     const device = await Device.findOne({ deviceId: decoded.deviceId });
     if (!device) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid device',
       });
+      return;
     }
 
     req.device = {
@@ -42,10 +44,11 @@ export const authenticateDevice = async (
 
     next();
   } catch (error) {
-    return res.status(401).json({
+    res.status(401).json({
       success: false,
       error: 'Invalid or expired token',
     });
+    return;
   }
 };
 
@@ -53,23 +56,25 @@ export const authenticateApiKey = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const apiKey = req.headers['x-api-key'] as string;
 
     if (!apiKey) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'No API key provided',
       });
+      return;
     }
 
     const device = await Device.findOne({ apiKey });
     if (!device) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid API key',
       });
+      return;
     }
 
     req.device = {
@@ -79,9 +84,10 @@ export const authenticateApiKey = async (
 
     next();
   } catch (error) {
-    return res.status(401).json({
+    res.status(401).json({
       success: false,
       error: 'Authentication failed',
     });
+    return;
   }
 };

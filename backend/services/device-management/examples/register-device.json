@@ -1,0 +1,109 @@
+{
+  "singleDevice": {
+    "name": "Living Room Sensor",
+    "deviceType": "ESP32-S3",
+    "description": "Motion and air quality sensor for living room",
+    "location": {
+      "name": "Living Room",
+      "latitude": 40.7128,
+      "longitude": -74.0060
+    },
+    "sensors": [
+      {
+        "type": "LD2410",
+        "enabled": true,
+        "config": {
+          "maxDistance": 6,
+          "sensitivity": 7
+        }
+      },
+      {
+        "type": "PIR",
+        "enabled": true,
+        "config": {
+          "timeout": 30
+        }
+      },
+      {
+        "type": "MQ134",
+        "enabled": true,
+        "config": {
+          "threshold": 100
+        }
+      }
+    ],
+    "metadata": {
+      "firmware": "1.0.0",
+      "hardware": "ESP32-S3-WROOM-1",
+      "installDate": "2025-01-01",
+      "installer": "John Doe"
+    }
+  },
+  "bulkDevices": {
+    "devices": [
+      {
+        "name": "Living Room Sensor",
+        "deviceType": "ESP32-S3",
+        "location": {
+          "name": "Living Room"
+        },
+        "sensors": [
+          {
+            "type": "LD2410",
+            "enabled": true
+          },
+          {
+            "type": "PIR",
+            "enabled": true
+          },
+          {
+            "type": "MQ134",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "name": "Bedroom Sensor",
+        "deviceType": "ESP32-S3",
+        "location": {
+          "name": "Bedroom"
+        },
+        "sensors": [
+          {
+            "type": "LD2410",
+            "enabled": true
+          },
+          {
+            "type": "PIR",
+            "enabled": true
+          },
+          {
+            "type": "MQ134",
+            "enabled": true
+          }
+        ]
+      },
+      {
+        "name": "Kitchen Sensor",
+        "deviceType": "ESP32-S3",
+        "location": {
+          "name": "Kitchen"
+        },
+        "sensors": [
+          {
+            "type": "LD2410",
+            "enabled": true
+          },
+          {
+            "type": "PIR",
+            "enabled": true
+          },
+          {
+            "type": "MQ134",
+            "enabled": true
+          }
+        ]
+      }
+    ]
+  }
+}
