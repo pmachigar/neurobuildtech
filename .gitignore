@@ -4,9 +4,12 @@
 /node_modules
 /.pnp
 .pnp.js
+node_modules/
+backend/services/analytics/node_modules/
 
 # testing
 /coverage
+coverage/
 
 # next.js
 /.next/
