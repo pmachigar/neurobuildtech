@@ -1,0 +1,360 @@
+# Network Policies for NeuroBuildTech
+# Implements network segmentation and micro-segmentation
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: neurobuildtech
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Allow ingress to API Gateway from external sources
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-gateway-ingress
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 8080
+
+---
+# Allow egress from API Gateway to backend services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-gateway-egress
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          app: auth-service
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Allow backend services to communicate with database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-database
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: timescaledb
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Allow backend services to communicate with Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-redis
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Allow MQTT broker ingress from devices
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mqtt-ingress
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: mqtt-broker
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8883  # MQTT over TLS
+    - protocol: TCP
+      port: 1883
+
+---
+# Allow MQTT broker to communicate with backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mqtt-to-backend
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: mqtt-broker
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Restrict database access - only from backend services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-database-access
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Restrict Redis access - only from backend services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-redis-access
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Allow DNS queries from all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-access
+  namespace: neurobuildtech
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# Allow monitoring from Prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scraping
+  namespace: neurobuildtech
+spec:
+  podSelector:
+    matchLabels:
+      monitoring: "true"
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+---
+# Firewall Rules Configuration (iptables/UFW)
+# These rules should be applied to the host system
+
+firewall_rules:
+  # Default policies
+  default:
+    input: DROP
+    forward: DROP
+    output: ACCEPT
+  
+  # Allow established connections
+  established:
+    - "-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
+    - "-A OUTPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT"
+  
+  # Allow loopback
+  loopback:
+    - "-A INPUT -i lo -j ACCEPT"
+    - "-A OUTPUT -o lo -j ACCEPT"
+  
+  # Allow SSH (with rate limiting)
+  ssh:
+    - "-A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set"
+    - "-A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 -j DROP"
+    - "-A INPUT -p tcp --dport 22 -j ACCEPT"
+  
+  # Allow HTTP/HTTPS
+  web:
+    - "-A INPUT -p tcp --dport 80 -j ACCEPT"
+    - "-A INPUT -p tcp --dport 443 -j ACCEPT"
+  
+  # Allow MQTT over TLS
+  mqtt:
+    - "-A INPUT -p tcp --dport 8883 -j ACCEPT"
+  
+  # Rate limiting for HTTP/HTTPS
+  rate_limit:
+    - "-A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT"
+    - "-A INPUT -p tcp --dport 443 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT"
+  
+  # Block common attack patterns
+  protection:
+    - "-A INPUT -p tcp --tcp-flags ALL NONE -j DROP"  # Null packets
+    - "-A INPUT -p tcp --tcp-flags ALL ALL -j DROP"   # XMAS packets
+    - "-A INPUT -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP"  # SYN-FIN packets
+    - "-A INPUT -p tcp --tcp-flags SYN,RST SYN,RST -j DROP"  # SYN-RST packets
+    - "-A INPUT -f -j DROP"  # Drop fragments
+    - "-A INPUT -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP"  # Stealth scan
+  
+  # Allow internal communication
+  internal:
+    - "-A INPUT -s 10.0.0.0/8 -j ACCEPT"
+    - "-A INPUT -s 172.16.0.0/12 -j ACCEPT"
+    - "-A INPUT -s 192.168.0.0/16 -j ACCEPT"
+  
+  # Log dropped packets (optional, can be verbose)
+  logging:
+    enabled: false
+    rules:
+      - "-A INPUT -m limit --limit 5/min -j LOG --log-prefix 'iptables denied: ' --log-level 7"
+
+# Network segmentation zones
+network_zones:
+  dmz:
+    description: "Demilitarized zone for public-facing services"
+    subnets:
+      - "10.0.1.0/24"
+    allowed_services:
+      - api-gateway
+      - web-frontend
+    
+  application:
+    description: "Application tier for backend services"
+    subnets:
+      - "10.0.2.0/24"
+    allowed_services:
+      - backend-services
+      - auth-service
+      - mqtt-broker
+    
+  data:
+    description: "Data tier for databases and storage"
+    subnets:
+      - "10.0.3.0/24"
+    allowed_services:
+      - postgresql
+      - timescaledb
+      - redis
+    
+  management:
+    description: "Management tier for monitoring and administration"
+    subnets:
+      - "10.0.4.0/24"
+    allowed_services:
+      - prometheus
+      - grafana
+      - vault
+
+# Service mesh configuration (if using Istio/Linkerd)
+service_mesh:
+  enabled: true
+  mtls:
+    mode: STRICT
+  authorization_policies:
+    - name: "allow-api-gateway-to-backend"
+      source: ["api-gateway"]
+      destination: ["backend-services"]
+    - name: "allow-backend-to-database"
+      source: ["backend-services"]
+      destination: ["postgresql", "timescaledb"]

@@ -1,0 +1,247 @@
+# Role-Based Access Control (RBAC) Policies
+# Defines roles, permissions, and access control rules for the NeuroBuildTech platform
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: neurobuildtech-rbac-policy
+  labels:
+    app: neurobuildtech
+    component: security
+
+---
+# Admin Role - Full access to all resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: admin-role
+  namespace: neurobuildtech
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+# User Role - Read-only access + device management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: user-role
+  namespace: neurobuildtech
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["neurobuildtech.io"]
+  resources: ["devices"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["neurobuildtech.io"]
+  resources: ["devices/status"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Device Role - Data submission only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: device-role
+  namespace: neurobuildtech
+rules:
+- apiGroups: ["neurobuildtech.io"]
+  resources: ["telemetry", "metrics", "events"]
+  verbs: ["create"]
+- apiGroups: ["neurobuildtech.io"]
+  resources: ["devices/status"]
+  verbs: ["get", "update"]
+
+---
+# Service Account for Admin
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-service-account
+  namespace: neurobuildtech
+
+---
+# Service Account for Users
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: user-service-account
+  namespace: neurobuildtech
+
+---
+# Service Account for Devices
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: device-service-account
+  namespace: neurobuildtech
+
+---
+# Role Binding for Admin
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-role-binding
+  namespace: neurobuildtech
+subjects:
+- kind: ServiceAccount
+  name: admin-service-account
+  namespace: neurobuildtech
+roleRef:
+  kind: Role
+  name: admin-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role Binding for Users
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user-role-binding
+  namespace: neurobuildtech
+subjects:
+- kind: ServiceAccount
+  name: user-service-account
+  namespace: neurobuildtech
+roleRef:
+  kind: Role
+  name: user-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role Binding for Devices
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: device-role-binding
+  namespace: neurobuildtech
+subjects:
+- kind: ServiceAccount
+  name: device-service-account
+  namespace: neurobuildtech
+roleRef:
+  kind: Role
+  name: device-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Application-Level RBAC Configuration
+# This section defines application-specific roles and permissions
+
+roles:
+  admin:
+    name: "Administrator"
+    description: "Full system access and administrative privileges"
+    permissions:
+      - "system:*"
+      - "users:*"
+      - "devices:*"
+      - "data:*"
+      - "settings:*"
+      - "security:*"
+      - "audit:*"
+    
+  user:
+    name: "User"
+    description: "Standard user with read access and device management"
+    permissions:
+      - "devices:read"
+      - "devices:create"
+      - "devices:update"
+      - "devices:delete"
+      - "data:read"
+      - "dashboards:read"
+      - "profile:update"
+    
+  device:
+    name: "Device"
+    description: "IoT device with data submission capabilities"
+    permissions:
+      - "telemetry:create"
+      - "metrics:create"
+      - "events:create"
+      - "device:status:update"
+    
+  readonly:
+    name: "Read-Only"
+    description: "Read-only access to system resources"
+    permissions:
+      - "devices:read"
+      - "data:read"
+      - "dashboards:read"
+    
+  operator:
+    name: "Operator"
+    description: "Operational access for system maintenance"
+    permissions:
+      - "devices:read"
+      - "devices:update"
+      - "data:read"
+      - "system:monitor"
+      - "logs:read"
+
+# Resource-based permissions
+resources:
+  devices:
+    actions:
+      - read
+      - create
+      - update
+      - delete
+      - provision
+      - deprovision
+    
+  data:
+    actions:
+      - read
+      - write
+      - export
+      - delete
+    
+  users:
+    actions:
+      - read
+      - create
+      - update
+      - delete
+      - assign_roles
+    
+  settings:
+    actions:
+      - read
+      - update
+    
+  security:
+    actions:
+      - read
+      - update
+      - audit
+    
+  system:
+    actions:
+      - monitor
+      - configure
+      - restart
+      - backup
+      - restore
+
+# Permission inheritance
+inheritance:
+  admin:
+    inherits: []
+  user:
+    inherits: ["readonly"]
+  operator:
+    inherits: ["readonly"]
+  readonly:
+    inherits: []
+  device:
+    inherits: []

@@ -1,0 +1,34 @@
+{
+  "name": "neurobuildtech-backend",
+  "version": "1.0.0",
+  "description": "Backend security components for NeuroBuildTech IoT platform",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint security/middleware/**/*.js",
+    "lint:fix": "eslint security/middleware/**/*.js --fix"
+  },
+  "keywords": [
+    "security",
+    "authentication",
+    "authorization",
+    "iot",
+    "backend"
+  ],
+  "author": "NeuroBuildTech",
+  "license": "MIT",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.57.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
