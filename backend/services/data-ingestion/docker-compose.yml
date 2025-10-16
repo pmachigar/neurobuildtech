@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  data-ingestion:
+    build: .
+    container_name: data-ingestion-service
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "9090:9090"
+    environment:
+      - NODE_ENV=production
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - mosquitto
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
