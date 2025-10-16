@@ -34,3 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backend
+/backend/services/data-storage/backups/
+/backend/services/data-storage/data/
+*.tar.gz
+*.manifest
