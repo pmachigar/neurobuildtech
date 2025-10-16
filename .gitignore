@@ -34,3 +34,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Security - certificates and keys
+backend/security/certificates/ca/
+backend/security/certificates/devices/
+*.key
+*.crt
+*.csr
+*.pem
+*.p12
+*.pfx
+
+# Security - vault data
+backend/security/vault/data/
+
+# Logs
+*.log
+logs/
