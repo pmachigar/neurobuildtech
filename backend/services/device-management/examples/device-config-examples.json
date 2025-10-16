@@ -1,0 +1,85 @@
+{
+  "examples": {
+    "basic": {
+      "description": "Basic configuration for ESP32-S3 with default settings",
+      "config": {
+        "samplingRate": 1000,
+        "reportingInterval": 60000,
+        "deviceName": "ESP32-Living-Room"
+      }
+    },
+    "advanced": {
+      "description": "Advanced configuration with all sensors configured",
+      "config": {
+        "samplingRate": 500,
+        "reportingInterval": 30000,
+        "sensors": {
+          "LD2410": {
+            "enabled": true,
+            "maxDistance": 6,
+            "sensitivity": 7,
+            "detectTimeout": 5,
+            "motionThreshold": 50,
+            "staticThreshold": 30
+          },
+          "PIR": {
+            "enabled": true,
+            "timeout": 30,
+            "sensitivity": "high",
+            "warmupTime": 60,
+            "retrigger": true
+          },
+          "MQ134": {
+            "enabled": true,
+            "threshold": 100,
+            "calibration": 1.0,
+            "alertLevel": 200,
+            "readInterval": 5000,
+            "smoothing": true,
+            "smoothingWindow": 10
+          }
+        },
+        "alerts": {
+          "enabled": true,
+          "endpoints": ["http://alert-service:8080/webhook"],
+          "conditions": {
+            "motionDetected": true,
+            "airQualityPoor": true,
+            "deviceOffline": true
+          }
+        }
+      }
+    },
+    "lowPower": {
+      "description": "Low power configuration for battery-operated devices",
+      "config": {
+        "samplingRate": 5000,
+        "reportingInterval": 300000,
+        "sensors": {
+          "LD2410": {
+            "enabled": true,
+            "maxDistance": 4,
+            "sensitivity": 6,
+            "detectTimeout": 3,
+            "dutyCycle": 20
+          },
+          "PIR": {
+            "enabled": true,
+            "timeout": 20,
+            "sensitivity": "low",
+            "dutyCycle": 30
+          },
+          "MQ134": {
+            "enabled": false
+          }
+        },
+        "power": {
+          "sleepMode": "deep",
+          "deepSleepInterval": 900000,
+          "wakeOnMotion": true,
+          "batteryMonitoring": true
+        }
+      }
+    }
+  }
+}
