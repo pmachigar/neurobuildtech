@@ -1,0 +1,122 @@
+{{- if .Values.deviceManagement.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: device-management
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: device-management
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.deviceManagement.replicaCount }}
+  selector:
+    matchLabels:
+      app: device-management
+      {{- include "iot-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: device-management
+        {{- include "iot-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.ha.nodeAffinity.enabled }}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: {{ .Values.ha.nodeAffinity.key }}
+                    operator: In
+                    values:
+                      - {{ .Values.ha.nodeAffinity.value }}
+        {{- if .Values.ha.podAntiAffinity.enabled }}
+        podAntiAffinity:
+          {{- if eq .Values.ha.podAntiAffinity.type "required" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - device-management
+              topologyKey: kubernetes.io/hostname
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - device-management
+                topologyKey: kubernetes.io/hostname
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: device-management
+          image: {{ include "iot-backend.image" (dict "Values" .Values "image" .Values.deviceManagement.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.deviceManagement.service.port }}
+              protocol: TCP
+          {{- if .Values.healthChecks.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.healthChecks.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.readinessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.deviceManagement.resources | nindent 12 }}
+          env:
+            - name: SERVICE_PORT
+              value: {{ .Values.deviceManagement.service.port | quote }}
+            - name: POSTGRES_HOST
+              value: postgresql
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: MQTT_HOST
+              value: mosquitto
+            - name: MQTT_PORT
+              value: "1883"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: device-management
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: device-management
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.deviceManagement.service.type }}
+  ports:
+    - port: {{ .Values.deviceManagement.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: device-management
+    {{- include "iot-backend.selectorLabels" . | nindent 4 }}
+{{- end }}

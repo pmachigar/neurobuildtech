@@ -1,0 +1,19 @@
+apiVersion: v2
+name: iot-backend
+description: IoT Backend Services Helm Chart for Raspberry Pi Cluster
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - iot
+  - backend
+  - raspberry-pi
+  - k3s
+  - edge-computing
+home: https://github.com/pmachigar/neurobuildtech
+sources:
+  - https://github.com/pmachigar/neurobuildtech
+maintainers:
+  - name: NeuroBuildTech Team
+    email: contact@neurobuildtech.com
+dependencies: []

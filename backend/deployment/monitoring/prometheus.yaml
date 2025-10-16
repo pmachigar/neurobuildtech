@@ -1,0 +1,286 @@
+# Prometheus Configuration for Raspberry Pi Cluster Monitoring
+# Optimized for ARM64 and resource-constrained environment
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: iot-backend
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'raspberry-pi-k3s'
+        environment: 'production'
+    
+    # Alerting configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager:9093
+    
+    # Load alert rules
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+    
+    # Scrape configurations
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      
+      # Kubernetes API server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+      
+      # Kubernetes nodes
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+      
+      # Kubernetes pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+      
+      # IoT Backend Services
+      - job_name: 'device-management'
+        static_configs:
+          - targets: ['device-management:8080']
+      
+      - job_name: 'data-ingestion'
+        static_configs:
+          - targets: ['data-ingestion:8081']
+      
+      - job_name: 'api-service'
+        static_configs:
+          - targets: ['api-service:8082']
+      
+      - job_name: 'analytics'
+        static_configs:
+          - targets: ['analytics:8083']
+      
+      # Databases
+      - job_name: 'influxdb'
+        static_configs:
+          - targets: ['influxdb:8086']
+      
+      - job_name: 'postgresql'
+        static_configs:
+          - targets: ['postgresql-exporter:9187']
+      
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+      
+      # MQTT Broker
+      - job_name: 'mosquitto'
+        static_configs:
+          - targets: ['mosquitto-exporter:9234']
+      
+      # Node Exporter (for hardware metrics)
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.*):10250'
+            replacement: '${1}:9100'
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: iot-backend
+  labels:
+    app: prometheus
+data:
+  alerts.yml: |
+    groups:
+      - name: cluster_alerts
+        interval: 30s
+        rules:
+          # Node alerts
+          - alert: NodeDown
+            expr: up{job="kubernetes-nodes"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{ $labels.node }} is down"
+              description: "Node {{ $labels.node }} has been down for more than 5 minutes."
+          
+          - alert: NodeHighCPU
+            expr: (100 - (avg by (node) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on node {{ $labels.node }}"
+              description: "CPU usage is above 80% on {{ $labels.node }} (current value: {{ $value }}%)"
+          
+          - alert: NodeHighMemory
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on node {{ $labels.node }}"
+              description: "Memory usage is above 85% on {{ $labels.node }} (current value: {{ $value }}%)"
+          
+          - alert: NodeDiskSpaceLow
+            expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Low disk space on node {{ $labels.node }}"
+              description: "Disk usage is above 85% on {{ $labels.node }} (current value: {{ $value }}%)"
+      
+      - name: service_alerts
+        interval: 30s
+        rules:
+          # Service availability
+          - alert: ServiceDown
+            expr: up{job=~"device-management|data-ingestion|api-service|analytics"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "Service {{ $labels.job }} has been down for more than 2 minutes."
+          
+          - alert: HighPodRestartRate
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High pod restart rate"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently."
+          
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0.3
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod is crash looping"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping."
+      
+      - name: database_alerts
+        interval: 30s
+        rules:
+          - alert: DatabaseDown
+            expr: up{job=~"influxdb|postgresql|redis"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Database {{ $labels.job }} is down"
+              description: "Database {{ $labels.job }} has been down for more than 2 minutes."
+          
+          - alert: InfluxDBHighWriteLatency
+            expr: influxdb_write_latency_seconds > 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "InfluxDB high write latency"
+              description: "InfluxDB write latency is above 1 second (current value: {{ $value }}s)"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: iot-backend
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - extensions
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: iot-backend

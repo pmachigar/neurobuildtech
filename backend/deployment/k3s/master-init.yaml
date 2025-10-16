@@ -1,0 +1,52 @@
+# K3s Master Node Configuration
+# This file defines the configuration for the K3s master/server node
+
+# Cluster configuration
+cluster-init: true
+write-kubeconfig-mode: "0644"
+
+# Disable default components (we'll deploy our own)
+disable:
+  - traefik    # We'll use NGINX Ingress
+  - servicelb  # We'll use MetalLB or custom load balancer
+
+# Network configuration
+cluster-cidr: "10.42.0.0/16"
+service-cidr: "10.43.0.0/16"
+cluster-dns: "10.43.0.10"
+
+# Flannel backend (default, lightweight for Raspberry Pi)
+flannel-backend: "vxlan"
+
+# Node taints (optional - prevents pods from scheduling on master)
+node-taint:
+  - "node-role.kubernetes.io/master=true:NoSchedule"
+
+# TLS settings
+tls-san:
+  - "master.local"
+  - "k3s-master.local"
+  # Add your master node's IP addresses here
+
+# Data directory (use M.2 SSD mount point for better performance)
+data-dir: "/var/lib/rancher/k3s"
+
+# Kubelet arguments
+kubelet-arg:
+  - "max-pods=110"
+  - "eviction-hard=memory.available<500Mi,nodefs.available<10%"
+  - "eviction-soft=memory.available<1Gi,nodefs.available<15%"
+  - "eviction-soft-grace-period=memory.available=2m,nodefs.available=2m"
+
+# API server arguments
+kube-apiserver-arg:
+  - "feature-gates=GracefulNodeShutdown=true"
+
+# Controller manager arguments
+kube-controller-manager-arg:
+  - "node-monitor-grace-period=40s"
+  - "pod-eviction-timeout=30s"
+
+# Scheduler arguments (optimize for resource-constrained environment)
+kube-scheduler-arg:
+  - "feature-gates=GracefulNodeShutdown=true"

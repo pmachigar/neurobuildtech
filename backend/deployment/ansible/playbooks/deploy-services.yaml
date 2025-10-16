@@ -1,0 +1,137 @@
+---
+# Ansible Playbook for Deploying IoT Backend Services
+# This playbook deploys all services using Helm
+
+- name: Deploy IoT Backend Services
+  hosts: k3s_master
+  become: yes
+  become_user: "{{ ansible_user }}"
+  
+  vars:
+    helm_version: v3.13.0
+    namespace: iot-backend
+    chart_path: "../../helm/iot-backend"
+    
+  tasks:
+    - name: Check if Helm is installed
+      stat:
+        path: /usr/local/bin/helm
+      register: helm_installed
+    
+    - name: Download Helm installation script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get_helm.sh
+        mode: '0700'
+      become: yes
+      when: not helm_installed.stat.exists
+    
+    - name: Install Helm
+      shell: /tmp/get_helm.sh
+      become: yes
+      when: not helm_installed.stat.exists
+    
+    - name: Create namespace
+      shell: kubectl create namespace {{ namespace }} --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+    
+    - name: Install NGINX Ingress Controller
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      ignore_errors: yes
+    
+    - name: Wait for Ingress Controller to be ready
+      shell: |
+        kubectl wait --namespace ingress-nginx \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=300s
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      ignore_errors: yes
+    
+    - name: Copy Helm chart to master node
+      synchronize:
+        src: "{{ chart_path }}"
+        dest: /tmp/
+        rsync_opts:
+          - "--exclude=.git"
+    
+    - name: Validate Helm chart
+      shell: helm lint /tmp/iot-backend
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      register: helm_lint
+      failed_when: false
+    
+    - name: Display Helm lint results
+      debug:
+        msg: "{{ helm_lint.stdout_lines }}"
+    
+    - name: Deploy IoT Backend with Helm
+      shell: |
+        helm upgrade --install iot-backend /tmp/iot-backend \
+          --namespace {{ namespace }} \
+          --create-namespace \
+          --wait \
+          --timeout 10m
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      register: helm_deploy
+    
+    - name: Display Helm deployment output
+      debug:
+        msg: "{{ helm_deploy.stdout_lines }}"
+    
+    - name: Apply Prometheus configuration
+      shell: |
+        kubectl apply -f ../../monitoring/prometheus.yaml
+      args:
+        chdir: /tmp/iot-backend
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      ignore_errors: yes
+    
+    - name: Apply Grafana configuration
+      shell: |
+        kubectl apply -f ../../monitoring/grafana.yaml
+      args:
+        chdir: /tmp/iot-backend
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      ignore_errors: yes
+    
+    - name: Get all pods in namespace
+      shell: kubectl get pods -n {{ namespace }}
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      register: pods_output
+    
+    - name: Display pods
+      debug:
+        msg: "{{ pods_output.stdout_lines }}"
+    
+    - name: Get all services in namespace
+      shell: kubectl get svc -n {{ namespace }}
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      register: services_output
+    
+    - name: Display services
+      debug:
+        msg: "{{ services_output.stdout_lines }}"
+    
+    - name: Get ingress resources
+      shell: kubectl get ingress -n {{ namespace }}
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+      register: ingress_output
+      ignore_errors: yes
+    
+    - name: Display ingress
+      debug:
+        msg: "{{ ingress_output.stdout_lines }}"
+      when: ingress_output.rc == 0

@@ -1,0 +1,147 @@
+{{- if .Values.influxdb.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: influxdb-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: influxdb
+    {{- include "iot-backend.labels" . | nindent 4 }}
+data:
+  influxdb.conf: |
+    # InfluxDB configuration for Raspberry Pi cluster
+    [meta]
+      dir = "/var/lib/influxdb2/meta"
+    
+    [data]
+      dir = "/var/lib/influxdb2/data"
+      wal-dir = "/var/lib/influxdb2/wal"
+      cache-max-memory-size = 524288000
+      cache-snapshot-memory-size = 26214400
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: influxdb-auth
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: influxdb
+    {{- include "iot-backend.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  admin-user: {{ .Values.influxdb.config.adminUser }}
+  admin-password: {{ .Values.influxdb.config.adminPassword }}
+  admin-token: {{ .Values.influxdb.config.adminPassword | b64enc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: influxdb-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: influxdb
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ include "iot-backend.storageClass" . }}
+  resources:
+    requests:
+      storage: {{ .Values.influxdb.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: influxdb
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.influxdb.replicaCount }}
+  selector:
+    matchLabels:
+      app: influxdb
+      {{- include "iot-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: influxdb
+        {{- include "iot-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: influxdb
+          image: {{ include "iot-backend.image" (dict "Values" .Values "image" .Values.influxdb.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.influxdb.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.influxdb.resources | nindent 12 }}
+          env:
+            - name: DOCKER_INFLUXDB_INIT_MODE
+              value: "setup"
+            - name: DOCKER_INFLUXDB_INIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-auth
+                  key: admin-user
+            - name: DOCKER_INFLUXDB_INIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-auth
+                  key: admin-password
+            - name: DOCKER_INFLUXDB_INIT_ORG
+              value: {{ .Values.influxdb.config.organization }}
+            - name: DOCKER_INFLUXDB_INIT_BUCKET
+              value: {{ .Values.influxdb.config.bucket }}
+            - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-auth
+                  key: admin-token
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.influxdb.persistence.mountPath }}
+            - name: config
+              mountPath: /etc/influxdb2
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: influxdb-pvc
+        - name: config
+          configMap:
+            name: influxdb-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: influxdb
+    {{- include "iot-backend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.influxdb.service.type }}
+  ports:
+    - port: {{ .Values.influxdb.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: influxdb
+    {{- include "iot-backend.selectorLabels" . | nindent 4 }}
+{{- end }}

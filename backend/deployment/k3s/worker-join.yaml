@@ -1,0 +1,31 @@
+# K3s Worker Node Configuration
+# This file defines the configuration for K3s agent/worker nodes
+
+# Server connection (set via environment variables K3S_URL and K3S_TOKEN)
+# K3S_URL should be: https://<master-ip>:6443
+# K3S_TOKEN should be obtained from: /var/lib/rancher/k3s/server/node-token on master
+
+# Data directory (use M.2 SSD mount point for better performance)
+data-dir: "/var/lib/rancher/k3s"
+
+# Node labels (customize based on node capabilities)
+node-label:
+  - "node-type=worker"
+  - "storage=m2-ssd"
+  - "ram=16gb"
+
+# Kubelet arguments (optimized for Raspberry Pi 5B with 16GB RAM)
+kubelet-arg:
+  - "max-pods=110"
+  - "eviction-hard=memory.available<1Gi,nodefs.available<10%"
+  - "eviction-soft=memory.available<2Gi,nodefs.available<15%"
+  - "eviction-soft-grace-period=memory.available=2m,nodefs.available=2m"
+  - "system-reserved=cpu=200m,memory=512Mi"
+  - "kube-reserved=cpu=200m,memory=512Mi"
+
+# Container runtime settings
+# Optimize for ARM64 and limited resources
+protect-kernel-defaults: false
+
+# Node name (optional, defaults to hostname)
+# node-name: "worker-01"
